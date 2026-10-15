@@ -106,11 +106,9 @@ void run_state(void)
 
 void clear_state(void)
 {
-	if(btn2_falling == 1)
-	{
-		state = STOP;
-	}
+	state = STOP;
 	counter = 0;
+
 }
 /* USER CODE END 0 */
 
