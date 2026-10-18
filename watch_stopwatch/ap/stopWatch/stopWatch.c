@@ -129,22 +129,19 @@ static void StopWatch_run()
 
 	static uint32_t prevTime = 0;
 	uint32_t curTime = HAL_GetTick();
-	uint16_t num = StopWatch_getCounter();
-	if(curTime - prevTime < 999){
+	if(curTime - prevTime < 1000){
 		return;
 	}
 	prevTime = curTime;
 
-	if(num == 3599){
+	if(counter == 3599){
 		StopWatch_clearCounter();
 	}
 	else {
 		StopWatch_incCounter();
 	}
 
-	num = StopWatch_getCounter();
-
-	fnd_set_num(num);
+	fnd_set_num(StopWatch_getCounter());
 }
 
 static void StopWatch_clear()

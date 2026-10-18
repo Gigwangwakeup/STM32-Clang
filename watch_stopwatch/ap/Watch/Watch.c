@@ -41,7 +41,7 @@ static uint16_t Watch_getCounter(void) // 카운터 값 읽기
 
 void Watch_tick(void)
 {
-	if(Watch_getCounter() == 3599){
+	if(counter == 3599){
 		Watch_clearCounter();
 	}
 	else {

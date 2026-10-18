@@ -109,7 +109,15 @@ static void fnd_disp_num(int number, int digit){
 		HAL_GPIO_WritePin(seg_font[i].GPIOx, seg_font[i].GPIO_Pin, seg_font_data[number][i]);
 	}
 
-	if(digit == FND_DIGIT_2){
+	static uint16_t dp_counter = 0;
+	if (dp_counter < 1000){
+		dp_counter ++;
+	}
+	else {
+		dp_counter = 0;
+	}
+
+	if((digit == FND_DIGIT_2) &&(dp_counter < 500)){
 		HAL_GPIO_WritePin(seg_font[7].GPIOx, seg_font[7].GPIO_Pin, GPIO_PIN_SET);
 	}
 	else {
