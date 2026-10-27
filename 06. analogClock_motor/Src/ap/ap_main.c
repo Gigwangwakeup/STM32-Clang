@@ -1,0 +1,180 @@
+/*
+ * ap_main.c
+ *
+ *  Created on: 2026. 10. 16.
+ *      Author: rhoblack
+ */
+
+#include "ap_main.h"
+#include "StopWatch/StopWatch.h"
+#include "TimeClock/TimeClock.h"
+#include "Display/Display.h"
+#include "../driver/fnd/fnd.h"
+#include "../driver/button/button.h"
+#include "../driver/led/led.h"
+#include "../driver/stepmotor/stepmotor.h"
+#include <stdio.h>	// [DEBUG]
+
+
+
+enum {TIME_CLOCK_MODE, STOP_WATCH_MODE};
+
+extern TIM_HandleTypeDef htim2;
+extern I2C_HandleTypeDef hi2c1;	// [DEBUG]
+volatile uint32_t dbgTim2Cnt = 0;	// [DEBUG] 1초 동안 TIM2 인터럽트 횟수
+extern TIM_HandleTypeDef htim3;
+extern TIM_HandleTypeDef htim4;
+
+button_t btnMode;
+
+stepMotor_pin_t stepMotorPinSec  = { .port = { GPIOA, GPIOA, GPIOA, GPIOB },
+									.pin = { GPIO_PIN_0, GPIO_PIN_1, GPIO_PIN_4, GPIO_PIN_0 } };
+stepMotor_pin_t stepMotorPinMin = { .port = { GPIOC, GPIOC, GPIOC, GPIOD },
+									.pin = { GPIO_PIN_10, GPIO_PIN_11, GPIO_PIN_12, GPIO_PIN_2 } };
+stepMotor_pin_t stepMotorPinHour  = { .port = { GPIOC, GPIOC, GPIOC, GPIOC },
+									.pin = { GPIO_PIN_9, GPIO_PIN_8, GPIO_PIN_6, GPIO_PIN_5 } };
+
+stepMotor_t motor_sec  = { .pin = &stepMotorPinSec, .stepCounter = 0, .position = 0 };
+stepMotor_t motor_min  = { .pin = &stepMotorPinMin, .stepCounter = 0, .position = 0 };
+stepMotor_t motor_hour = { .pin = &stepMotorPinHour, .stepCounter = 0, .position = 0 };
+
+int modeState = TIME_CLOCK_MODE;
+
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if (htim->Instance == TIM2) {
+		dbgTim2Cnt++;	// [DEBUG]
+		// 1ms마다 호출. super loop는 LCD 출력 때문에 느려서 스텝은 타이머 인터럽트에서 돌린다.
+		StepMotor_task(&motor_sec);
+		StepMotor_task(&motor_min);
+		StepMotor_task(&motor_hour);
+	}
+	else if (htim->Instance == TIM3) {
+		//fnd_show_number();
+		Disp_ISR();
+	}
+	else if (htim->Instance == TIM4) {
+		TimeClock_ISR();
+		StopWatch_ISR();
+	}
+}
+
+// 현재 모드의 시/분/초 값에 맞춰 세 바늘의 목표 위치를 갱신한다.
+// 한 단계 아래 단위까지 반영해서 목표가 연속으로 움직이므로 바늘이 부드럽게 돈다.
+void ap_HandTask(void)
+{
+	uint8_t hour, min, sec, msec;
+
+	if (modeState == TIME_CLOCK_MODE) {
+		TimeClock_t *t = TimeClock_getTimeData();
+		hour = t->hour;
+		min = t->min;
+		sec = t->sec;
+		msec = t->msec;
+	}
+	else {
+		stopWatch_t *t = StopWatch_getTimeData();
+		hour = t->hour;
+		min = t->min;
+		sec = t->sec;
+		msec = t->msec;
+	}
+
+	uint32_t centiSec = (uint32_t)sec * 100 + msec;			// 0 ~ 5999, 60초에 1바퀴
+	uint32_t minSec   = (uint32_t)min * 60 + sec;			// 0 ~ 3599, 60분에 1바퀴
+	uint32_t hourMin  = (uint32_t)(hour % 12) * 60 + min;	// 0 ~ 719, 12시간에 1바퀴
+
+	StepMotor_setTarget(&motor_sec,  centiSec * STEPS_PER_REV / 6000);
+	StepMotor_setTarget(&motor_min,  minSec   * STEPS_PER_REV / 3600);
+	StepMotor_setTarget(&motor_hour, hourMin  * STEPS_PER_REV / 720);
+}
+
+void ap_init(void)
+{
+	StopWatch_init();
+	TimeClock_init();
+	Disp_init();
+
+	StepMotor_init(&motor_sec, &stepMotorPinSec);
+	StepMotor_init(&motor_min, &stepMotorPinMin);
+	StepMotor_init(&motor_hour, &stepMotorPinHour);
+
+	button_init(&btnMode, GPIOC, GPIO_PIN_0);
+
+	HAL_TIM_Base_Start_IT(&htim2);
+	HAL_TIM_Base_Start_IT(&htim3);
+	HAL_TIM_Base_Start_IT(&htim4);
+}
+
+void ap_timeClockMode(void)
+{
+	if (button_getState(&btnMode) == ACT_RELEASE) {
+		modeState = STOP_WATCH_MODE;
+	}
+	TimeClock_task();
+
+	TimeClock_t *pTimeClockTime = TimeClock_getTimeData();
+	Disp_setTimeClockTime((timeClockTime_t *)pTimeClockTime);
+
+	TimeDate_t *pTimeDate = TimeClock_getDateData();
+	Disp_setTimeClockDate((timeClockDate_t *)pTimeDate);
+
+	Disp_setMode(modeState);
+}
+
+void ap_stopWatchMode(void)
+{
+	if (button_getState(&btnMode) == ACT_RELEASE) {
+		modeState = TIME_CLOCK_MODE;
+	}
+	StopWatch_task();
+
+	stopWatch_t *pStopWatchTime = StopWatch_getTimeData();
+	Disp_setStopWatchTime((stopWatchTime_t *)pStopWatchTime);
+
+	stopWatch_state_t stopWatchState = StopWatch_getState();
+	Disp_setStopWatchState(stopWatchState);
+
+	Disp_setMode(modeState);
+//	TimeClock_t *pTimeClockTime = TimeClock_getTimeData();
+//	Disp_setTimeClockTime((timeClockTime_t *)pTimeClockTime);
+}
+
+int ap_main(void)
+{
+	ap_init();
+
+	uint32_t dbgPrintTick = HAL_GetTick();	// [DEBUG]
+	uint32_t dbgMaxLoop = 0;	// [DEBUG]
+
+	while(1) // super loop
+	{
+		uint32_t dbgLoopStart = HAL_GetTick();	// [DEBUG]
+		TimeClock_task();
+		switch (modeState)
+		{
+		case TIME_CLOCK_MODE:
+			ap_timeClockMode();
+			break;
+		case STOP_WATCH_MODE:
+			ap_stopWatchMode();
+			break;
+		default:
+			break;
+		}
+		ap_HandTask();
+
+		// [DEBUG] 1초마다 루프 최대 시간, TIM2 횟수, I2C 에러를 UART로 출력
+		uint32_t dbgLoop = HAL_GetTick() - dbgLoopStart;
+		if (dbgLoop > dbgMaxLoop) dbgMaxLoop = dbgLoop;
+		if (HAL_GetTick() - dbgPrintTick >= 1000) {
+			printf("tick=%lu maxLoop=%lums tim2=%lu i2cErr=0x%lx i2cState=0x%x\r\n",
+					HAL_GetTick(), dbgMaxLoop, dbgTim2Cnt, hi2c1.ErrorCode, hi2c1.State);
+			dbgTim2Cnt = 0;
+			dbgMaxLoop = 0;
+			dbgPrintTick = HAL_GetTick();
+		}
+	}
+	return 0;
+}
