@@ -1,7 +1,7 @@
 # STM32-Clang
 
 **NUCLEO-F411RE** 보드와 **STM32 HAL**로 진행한 임베디드 C 실습 모음입니다.
-GPIO 제어부터 시작해서 타이머 인터럽트, I2C(RTC·LCD), 센서 드라이버, 스텝모터, PWM까지 단계별로 다룹니다.
+GPIO 제어부터 시작해서 타이머 인터럽트, I2C(RTC·LCD), 센서 드라이버, 스텝모터, PWM, 이벤트 큐까지 단계별로 다룹니다.
 
 ## 개발 환경
 
@@ -30,6 +30,7 @@ GPIO 제어부터 시작해서 타이머 인터럽트, I2C(RTC·LCD), 센서 드
 | 06 | [analogClock_motor](06.%20analogClock_motor) | 스텝모터 3개로 만든 아날로그 시계 | 스텝모터, 스텝 오차 보정 |
 | 07 | [dist_temp_humid_sensor](07.dist_temp_humid_sensor) | 거리·온습도를 LCD에 표시 | HC-SR04, DHT11, EXTI, DWT us 딜레이 |
 | 08 | [PWM](08.PWM) | 버튼으로 PWM 주파수·듀티비 조절 | 타이머 PWM, ARR / CCR |
+| 09 | [smartWatch](09.smartWatch) | 달력·온습도·거리·스톱워치를 버튼으로 전환하는 스마트워치 | 버튼 이벤트 큐(링 버퍼), 상태 머신, 디버깅 기록 |
 
 ## 학습 흐름
 
@@ -37,6 +38,8 @@ GPIO 제어부터 시작해서 타이머 인터럽트, I2C(RTC·LCD), 센서 드
 01 GPIO ─▶ 02 FND ─▶ 03 상태 머신·디바운싱 ─▶ 04 타이머 인터럽트·계층 구조
                                                        │
 08 PWM ◀─ 07 센서(EXTI, us 딜레이) ◀─ 06 스텝모터 ◀─ 05 I2C (RTC, LCD)
+
+09 스마트워치: 05~07 기능 통합 + 버튼 이벤트 큐
 ```
 
 ## 코드 구조 (04번 이후)
@@ -46,7 +49,7 @@ main.c          CubeMX 생성 코드 + ap_main() 호출
 ap/             애플리케이션: 모드 전환, 각 기능의 task / ISR
   service/      (07~) 센서 값 처리, 화면 표시 같은 기능 단위
 driver/         하드웨어 드라이버: button, led, fnd, lcd, DS3231, stepmotor, DHT11, HCSR04
-common/         (07~) 공통 유틸리티 (us 딜레이)
+common/         (07~) 공통 유틸리티 (us 딜레이, 09~ 링 버퍼 큐)
 ```
 
 - 메인 루프(super loop)에서 각 모듈의 `xxx_task()`를 반복 호출
