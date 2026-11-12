@@ -1,0 +1,39 @@
+# ---------- STM32CubeIDE 빌드 결과 ----------
+Debug/
+Release/
+*.o
+*.d
+*.su
+*.cyclo
+*.elf
+*.map
+*.list
+*.bin
+*.hex
+
+# CubeIDE가 다시 만드는 설정
+.settings/language.settings.xml
+.metadata/
+*.launch.bak
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# PC마다 다른 값 (측정한 한 층 이동 시간)
+elevator_teamproject/python_model_verification/settings.json
+
+# ---------- 압축본, 영상, 발표 자료 ----------
+*.zip
+*.mp4
+*.mkv
+*.pptx
+
+# ---------- OS, 에디터 ----------
+Thumbs.db
+desktop.ini
+.DS_Store
+*.bak
+*.swp
