@@ -59,11 +59,7 @@
 
 ### 2.1 하드웨어 구조
 
-![HW Structure](images/hw_structure.png)
-
 ### 2.2 소프트웨어 구조 (계층)
-
-![SW Structure](images/sw_structure.png)
 
 | 계층 | 모듈 (`Core/Src`) |
 |---|---|
