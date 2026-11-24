@@ -1,2 +1,39 @@
 # 팀 프로젝트 작업용 원본 (별도 비공개 저장소). 정리본은 11.elevator_teamproject
 teamproject/
+
+# ---------- STM32CubeIDE 빌드 결과 ----------
+Debug/
+Release/
+*.o
+*.d
+*.su
+*.cyclo
+*.elf
+*.map
+*.list
+*.bin
+*.hex
+.settings/language.settings.xml
+.metadata/
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# PC마다 다른 값 (엘리베이터 GUI가 측정한 한 층 이동 시간)
+11.elevator_teamproject/elevator_teamproject/python_model_verification/settings.json
+
+# ---------- 압축본, 영상, 발표 자료 ----------
+*.zip
+*.mp4
+*.mkv
+*.pptx
+
+# ---------- OS, 에디터 ----------
+Thumbs.db
+desktop.ini
+.DS_Store
+*.bak
+*.swp

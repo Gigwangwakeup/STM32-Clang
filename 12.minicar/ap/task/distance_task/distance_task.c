@@ -1,0 +1,136 @@
+/*
+ * distance_task.c
+ *
+ *  Created on: 2026. 11. 13.
+ *      Author: kccistc
+ */
+
+#include "stdio.h"
+#include "stdbool.h"
+#include "distance_task.h"
+#include "../../message.h"
+#include "../../../driver/lcd/lcd.h"
+
+
+// debug
+#define DISTANCE_DEBUG	0		// 디버깅 끝나면 0 또는 이 블록 삭제
+
+#if DISTANCE_DEBUG
+#include "usart.h"
+static void distance_print(void);
+#endif
+//////////
+
+extern TIM_HandleTypeDef htim11;
+
+hcsr04_t hcsr04_center, hcsr04_right, hcsr04_left;
+
+uint16_t cm_center, cm_right, cm_left;
+static bool side_flag;
+static uint32_t echo_us_center, echo_us_right, echo_us_left;
+static bool start_flag_center, start_flag_right, start_flag_left;
+static hcsr04_status_t hcsr04_status_center = HCSR04_ERR_NOT_STARTED;
+static hcsr04_status_t hcsr04_status_right = HCSR04_ERR_NOT_STARTED;
+static hcsr04_status_t hcsr04_status_left = HCSR04_ERR_NOT_STARTED;
+
+
+void distance_task_init(void)
+{
+	HCSR04_init(&hcsr04_center, GPIOA, GPIO_PIN_10, GPIOC, GPIO_PIN_4, &htim11); // center
+	HCSR04_init(&hcsr04_right , GPIOC, GPIO_PIN_2 , GPIOC, GPIO_PIN_3, &htim11); // right
+	HCSR04_init(&hcsr04_left  , GPIOC, GPIO_PIN_1 , GPIOC, GPIO_PIN_0, &htim11); // left
+
+	distance_request(&hcsr04_center, &start_flag_center);
+	side_flag = true;
+
+}
+
+void distance_task(void){
+	if(HCSR04_getResult(&hcsr04_center, &echo_us_center) == HCSR04_OK){
+		hcsr04_status_center = HCSR04_OK;
+	}
+	if(HCSR04_getResult(&hcsr04_right, &echo_us_right) == HCSR04_OK){
+		hcsr04_status_right = HCSR04_OK;
+	}
+	if(HCSR04_getResult(&hcsr04_left, &echo_us_left) == HCSR04_OK){
+		hcsr04_status_left = HCSR04_OK;
+	}
+		if(distance_get(echo_us_center, &hcsr04_status_center, &start_flag_center, &cm_center) == DISTANCE_OK){
+			distance_request(&hcsr04_right, &start_flag_right);
+			hcsr04_status_right = HCSR04_ERR_NOT_STARTED;
+		}
+		if(distance_get(echo_us_right, &hcsr04_status_right, &start_flag_right, &cm_right) == DISTANCE_OK){
+			distance_request(&hcsr04_left, &start_flag_left);
+			hcsr04_status_left = HCSR04_ERR_NOT_STARTED;
+		}
+		if(distance_get(echo_us_left, &hcsr04_status_left, &start_flag_left, &cm_left) == DISTANCE_OK){
+			distance_request(&hcsr04_center, &start_flag_center);
+			hcsr04_status_center = HCSR04_ERR_NOT_STARTED;
+		}
+
+	if(osMutexWait(lcdMutexHandle, osWaitForever) == osOK){
+		char buf[30];
+		sprintf(buf, "R:%03dC:%03dL:%03d ",cm_right,cm_center,cm_left);
+		Lcd_writeStringXY(1, 0, buf);
+		osMutexRelease(lcdMutexHandle);
+	}
+
+
+#if DISTANCE_DEBUG
+	distance_print();
+#endif
+
+}
+
+void distance_request(hcsr04_t *hcsr04, bool *start_flag){
+	*start_flag = true;
+	HCSR04_start(hcsr04);
+}
+
+distance_status_t distance_get(uint32_t echo_us, hcsr04_status_t *hcsr04_status,
+		bool *start_flag, uint16_t *distance_cm)
+{
+	if(*start_flag != true){
+		return DISTANCE_NOT_READY;
+	}
+	if(*hcsr04_status != HCSR04_OK){
+		return DISTANCE_IN_PROGRESS;
+	}
+	*start_flag = false;
+	*distance_cm = echo_us * 17 / 1000;
+
+	return DISTANCE_OK;
+}
+
+void distance_ISR(hcsr04_t *hcsr04){
+	HCSR04_echoISR(hcsr04);
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	if(GPIO_Pin == GPIO_PIN_4) {
+		distance_ISR(&hcsr04_center);
+	}
+	if(GPIO_Pin == GPIO_PIN_3) {
+		distance_ISR(&hcsr04_right);
+	}
+	if(GPIO_Pin == GPIO_PIN_0) {
+		distance_ISR(&hcsr04_left);
+	}
+}
+//for debugging
+#if DISTANCE_DEBUG
+static void distance_print(void)
+{
+	static uint32_t last_ms = 0;
+	if(HAL_GetTick() - last_ms < 100){    // 100ms에 한 번만 출력
+		return;
+	}
+	last_ms = HAL_GetTick();
+
+	char buf[40];
+	int len = snprintf(buf, sizeof(buf), "L:%u C:%u R:%u cm\r\n",
+			cm_left, cm_center, cm_right);
+	HAL_UART_Transmit(&huart2, (uint8_t *)buf, len, 10);
+}
+#endif
